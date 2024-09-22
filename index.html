@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>XJJ Video</title>
+    <style>
+      body {
+        margin: 0;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        background-color: #000;
+      }
+
+      .video {
+        width: 90%;
+        height: 90%;
+        object-fit: contain;
+        position: absolute;
+        top: 5%;
+        left: 5%;
+        transition: opacity 1s ease-in-out;
+        opacity: 1;
+        display: block;
+      }
+      .video.hidden {
+        opacity: 0;
+      }
+
+      #videoContainer {
+        position: relative;
+        width: 100%;
+        height: 90vh;
+        overflow: hidden;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+
+      #controls {
+        width: 100%;
+        height: 10vh;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        background-color: #222;
+      }
+
+      button {
+        margin: 0 10px;
+        padding: 10px 20px;
+        font-size: 16px;
+        cursor: pointer;
+        border: none;
+        border-radius: 5px;
+        background-color: #444;
+        color: white;
+      }
+
+      button.active {
+        background-color: #666;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- 视频来源选择 -->
+    <select id="videoSource">
+      <option value="https://api.yujn.cn/api/zzxjj.php?type=json">遇见API1</option>
+      <option value="https://api.yujn.cn/api/xjj.php?type=json">遇见API2</option>
+      <option value="https://api.qqsuu.cn/api/dm-xjj2?type=json">qqsuu1</option>
+      <option value="https://api.cenguigui.cn/api/mp4/MP4_xiaojiejie.php?type=json">qqsuu2</option>
+    </select>
+
+    <div id="videoContainer">
+      <video id="videoPlayer" class="video" controls preload="auto"></video>
+      <video id="videoPlayer1" class="video" controls preload="auto"></video>
+    </div>
+
+    <div id="controls">
+      <button id="muteButton">打开声音</button>
+      <button id="autoPlayButton">关闭自动切换</button>
+      <button id="nextVideoButton">切换下一个</button>
+    </div>
+
+    <script>
+      const videoContainer = document.getElementById("videoContainer");
+      const muteButton = document.getElementById("muteButton");
+      const autoPlayButton = document.getElementById("autoPlayButton");
+      const videoSourceSelect = document.getElementById("videoSource");
+      let currentPlayer = document.getElementById("videoPlayer");
+      let prePlayer = document.getElementById("videoPlayer1");
+      let isLoading = false;
+      let autoPlayNext = true; // 默认自动播放下一个视频
+      let isMuted = true; // 默认静音
+      let currentApiUrl = videoSourceSelect.value; // 默认视频来源
+
+      // 当用户更改视频来源时，更新API URL
+      videoSourceSelect.addEventListener("change", () => {
+        currentApiUrl = videoSourceSelect.value;
+        initializeVideos(); // 切换视频源时重新加载视频
+      });
+
+      async function fetchVideoUrl() {
+        try {
+          const response = await fetch(`/api.php?url=${encodeURIComponent(currentApiUrl)}`);
+          const data = await response.json();
+          return data.url;
+        } catch (err) {
+          console.error("Failed to fetch video url: ", err);
+          return null;
+        }
+      }
+
+      async function initializeVideos() {
+        prePlayer.classList.add("hidden");
+        prePlayer.style.display = "none";
+        currentPlayer.muted = isMuted;
+        prePlayer.muted = isMuted;
+
+        const url1 = await fetchVideoUrl();
+        const url2 = await fetchVideoUrl();
+
+        if (url1) {
+          currentPlayer.src = url1;
+          currentPlayer.load();
+          currentPlayer.play();
+        }
+        
+        if (url2) {
+          prePlayer.src = url2;
+          prePlayer.load();
+        }
+      }
+
+      async function preloadNextVideo() {
+        const newUrl = await fetchVideoUrl();
+        if (newUrl) {
+          prePlayer.src = newUrl;
+          prePlayer.load();
+        }
+      }
+
+      async function switchVideos() {
+        if (isLoading) {
+          return;
+        }
+        try {
+          isLoading = true;
+          currentPlayer.classList.add("hidden");
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          currentPlayer.style.display = "none";
+          await currentPlayer.pause();
+
+          prePlayer.style.display = "block";
+          prePlayer.classList.remove("hidden");
+          await prePlayer.play();
+
+          [currentPlayer, prePlayer] = [prePlayer, currentPlayer];
+
+          const newUrl = await fetchVideoUrl();
+          if (newUrl) {
+            prePlayer.src = newUrl;
+            prePlayer.load();
+          }
+          setTimeout(() => {
+            isLoading = false;
+          }, 1000);
+        } catch (e) {
+          setTimeout(() => {
+            isLoading = false;
+          }, 1000);
+          console.error("switch video error: ", e);
+          switchVideos();
+        }
+      }
+
+      function handleAutoPlay() {
+        const wasAutoPlayNext = autoPlayNext;
+        autoPlayNext = !autoPlayNext;
+        autoPlayButton.classList.toggle("active", autoPlayNext);
+        autoPlayButton.textContent = autoPlayNext ? "关闭自动切换" : "打开自动切换";
+        if (!wasAutoPlayNext && autoPlayNext) {
+          preloadNextVideo();
+        }
+      }
+
+      function handleMuteToggle() {
+        isMuted = !isMuted;
+        muteButton.classList.toggle("active", !isMuted);
+        muteButton.textContent = isMuted ? "打开声音" : "静音";
+        currentPlayer.muted = isMuted;
+        prePlayer.muted = isMuted;
+      }
+
+      function handleNextVideo() {
+        switchVideos();
+      }
+
+      let touchStartY = 0;
+      let touchEndY = 0;
+
+      function handleTouchStart(event) {
+        touchStartY = event.touches[0].clientY;
+      }
+
+      function handleTouchEnd(event) {
+        touchEndY = event.changedTouches[0].clientY;
+        handleSwipe();
+      }
+
+      function handleSwipe() {
+        const swipeDistance = touchEndY - touchStartY;
+        if (swipeDistance < -50) {
+          switchVideos();
+        }
+      }
+
+      function handleScroll(event) {
+        event.preventDefault();
+        if (event.deltaY > 0) {
+          switchVideos();
+        }
+      }
+
+      window.addEventListener("touchstart", handleTouchStart, { passive: true });
+      window.addEventListener("touchend", handleTouchEnd, { passive: true });
+      window.addEventListener("wheel", handleScroll, { passive: false });
+
+      currentPlayer.addEventListener("ended", () => {
+        if (autoPlayNext) {
+          switchVideos();
+        }
+      });
+      prePlayer.addEventListener("ended", () => {
+        if (autoPlayNext) {
+          switchVideos();
+        }
+      });
+
+      muteButton.addEventListener("click", handleMuteToggle);
+      autoPlayButton.addEventListener("click", handleAutoPlay);
+      nextVideoButton.addEventListener("click", handleNextVideo);
+      initializeVideos();
+    </script>
+  </body>
+</html>
