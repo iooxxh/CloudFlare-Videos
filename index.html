@@ -28,6 +28,7 @@
         opacity: 1;
         display: block;
       }
+
       .video.hidden {
         opacity: 0;
       }
@@ -74,29 +75,12 @@
         border: none;
         border-radius: 5px;
         appearance: none;
-        -webkit-appearance: none;
-        -moz-appearance: none;
-        outline: none;
-        cursor: pointer;
         margin-bottom: 20px;
       }
 
       #videoSource:hover {
         background-color: #666;
       }
-
-      #videoSource:focus {
-        box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
-      }
-
-      #videoSource {
-        background-image: url('data:image/svg+xml;utf8,<svg fill="%23ffffff" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/></svg>');
-        background-repeat: no-repeat;
-        background-position: right 10px center;
-        background-size: 20px;
-        padding-right: 40px;
-      }
-
     </style>
   </head>
   <body>
@@ -120,38 +104,34 @@
     </div>
 
     <script>
-      const videoContainer = document.getElementById("videoContainer");
-      const muteButton = document.getElementById("muteButton");
-      const autoPlayButton = document.getElementById("autoPlayButton");
+      const proxyUrl = '/api?url=';  // 使用 Cloudflare Worker 的 API 路径
       const videoSourceSelect = document.getElementById("videoSource");
       let currentPlayer = document.getElementById("videoPlayer");
       let prePlayer = document.getElementById("videoPlayer1");
-      let isLoading = false;
-      let autoPlayNext = true; // 默认自动播放下一个视频
       let isMuted = true; // 默认静音
-      let currentApiUrl = videoSourceSelect.value; // 默认视频来源
+      let autoPlayNext = true; // 默认自动切换
+      let currentApiUrl = videoSourceSelect.value; // 当前视频API URL
 
-      // 当用户更改视频来源时，更新API URL
+      // 当用户更改视频来源时，更新API URL并重新加载视频
       videoSourceSelect.addEventListener("change", () => {
         currentApiUrl = videoSourceSelect.value;
-        initializeVideos(); // 切换视频源时重新加载视频
+        initializeVideos();
       });
 
       async function fetchVideoUrl() {
         try {
-          // 请求 Cloudflare Worker 处理的 API 路径
-          const response = await fetch(`/api?url=${encodeURIComponent(currentApiUrl)}`);
+          const response = await fetch(proxyUrl + encodeURIComponent(currentApiUrl));
           const data = await response.json();
 
-          // 使用 data 字段作为视频的 URL
-          if (data && data.code === 200 && data.data) {
-            return data.data;  // 返回视频的 URL
+          // 返回视频的 URL
+          if (data && data.videoUrl) {
+            return data.videoUrl;
           } else {
             console.error("Invalid response structure:", data);
             return null;
           }
         } catch (err) {
-          console.error("Failed to fetch video url: ", err);
+          console.error("Failed to fetch video url:", err);
           return null;
         }
       }
@@ -177,6 +157,7 @@
         }
       }
 
+      // 自动预加载下一个视频
       async function preloadNextVideo() {
         const newUrl = await fetchVideoUrl();
         if (newUrl) {
@@ -186,105 +167,41 @@
       }
 
       async function switchVideos() {
-        if (isLoading) {
-          return;
-        }
-        try {
-          isLoading = true;
-          currentPlayer.classList.add("hidden");
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-          currentPlayer.style.display = "none";
-          await currentPlayer.pause();
+        currentPlayer.classList.add("hidden");
+        await currentPlayer.pause();
+        prePlayer.classList.remove("hidden");
+        await prePlayer.play();
 
-          prePlayer.style.display = "block";
-          prePlayer.classList.remove("hidden");
-          await prePlayer.play();
+        // 交换 currentPlayer 和 prePlayer
+        [currentPlayer, prePlayer] = [prePlayer, currentPlayer];
 
-          [currentPlayer, prePlayer] = [prePlayer, currentPlayer];
-
-          const newUrl = await fetchVideoUrl();
-          if (newUrl) {
-            prePlayer.src = newUrl;
-            prePlayer.load();
-          }
-          setTimeout(() => {
-            isLoading = false;
-          }, 1000);
-        } catch (e) {
-          setTimeout(() => {
-            isLoading = false;
-          }, 1000);
-          console.error("switch video error: ", e);
-          switchVideos();
+        const newUrl = await fetchVideoUrl();
+        if (newUrl) {
+          prePlayer.src = newUrl;
+          prePlayer.load();
         }
       }
 
+      // 切换自动播放
       function handleAutoPlay() {
-        const wasAutoPlayNext = autoPlayNext;
         autoPlayNext = !autoPlayNext;
-        autoPlayButton.classList.toggle("active", autoPlayNext);
-        autoPlayButton.textContent = autoPlayNext ? "关闭自动切换" : "打开自动切换";
-        if (!wasAutoPlayNext && autoPlayNext) {
-          preloadNextVideo();
-        }
+        document.getElementById("autoPlayButton").textContent = autoPlayNext ? "关闭自动切换" : "打开自动切换";
+        if (autoPlayNext) preloadNextVideo();
       }
 
+      // 切换静音状态
       function handleMuteToggle() {
         isMuted = !isMuted;
-        muteButton.classList.toggle("active", !isMuted);
-        muteButton.textContent = isMuted ? "打开声音" : "静音";
         currentPlayer.muted = isMuted;
         prePlayer.muted = isMuted;
+        document.getElementById("muteButton").textContent = isMuted ? "打开声音" : "静音";
       }
 
-      function handleNextVideo() {
-        switchVideos();
-      }
+      // 切换到下一个视频
+      document.getElementById("nextVideoButton").addEventListener("click", switchVideos);
+      document.getElementById("autoPlayButton").addEventListener("click", handleAutoPlay);
+      document.getElementById("muteButton").addEventListener("click", handleMuteToggle);
 
-      let touchStartY = 0;
-      let touchEndY = 0;
-
-      function handleTouchStart(event) {
-        touchStartY = event.touches[0].clientY;
-      }
-
-      function handleTouchEnd(event) {
-        touchEndY = event.changedTouches[0].clientY;
-        handleSwipe();
-      }
-
-      function handleSwipe() {
-        const swipeDistance = touchEndY - touchStartY;
-        if (swipeDistance < -50) {
-          switchVideos();
-        }
-      }
-
-      function handleScroll(event) {
-        event.preventDefault();
-        if (event.deltaY > 0) {
-          switchVideos();
-        }
-      }
-
-      window.addEventListener("touchstart", handleTouchStart, { passive: true });
-      window.addEventListener("touchend", handleTouchEnd, { passive: true });
-      window.addEventListener("wheel", handleScroll, { passive: false });
-
-      currentPlayer.addEventListener("ended", () => {
-        if (autoPlayNext) {
-          switchVideos();
-        }
-      });
-      prePlayer.addEventListener("ended", () => {
-        if (autoPlayNext) {
-          switchVideos();
-        }
-      });
-
-      muteButton.addEventListener("click", handleMuteToggle);
-      autoPlayButton.addEventListener("click", handleAutoPlay);
-      nextVideoButton.addEventListener("click", handleNextVideo);
       initializeVideos();
     </script>
   </body>
