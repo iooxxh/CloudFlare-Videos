@@ -100,6 +100,7 @@
     </style>
   </head>
   <body>
+    <!-- 美化后的接口选择按钮 -->
     <select id="videoSource">
       <option value="https://api.yujn.cn/api/zzxjj.php?type=json">遇见API1</option>
       <option value="https://api.yujn.cn/api/xjj.php?type=json">遇见API2</option>
@@ -119,12 +120,18 @@
     </div>
 
     <script>
+      const videoContainer = document.getElementById("videoContainer");
+      const muteButton = document.getElementById("muteButton");
+      const autoPlayButton = document.getElementById("autoPlayButton");
       const videoSourceSelect = document.getElementById("videoSource");
       let currentPlayer = document.getElementById("videoPlayer");
       let prePlayer = document.getElementById("videoPlayer1");
+      let isLoading = false;
+      let autoPlayNext = true; // 默认自动播放下一个视频
       let isMuted = true; // 默认静音
       let currentApiUrl = videoSourceSelect.value; // 默认视频来源
 
+      // 当用户更改视频来源时，更新API URL
       videoSourceSelect.addEventListener("change", () => {
         currentApiUrl = videoSourceSelect.value;
         initializeVideos(); // 切换视频源时重新加载视频
@@ -135,7 +142,14 @@
           // 请求 Cloudflare Worker 处理的 API 路径
           const response = await fetch(`/api?url=${encodeURIComponent(currentApiUrl)}`);
           const data = await response.json();
-          return data.url;
+
+          // 使用 data 字段作为视频的 URL
+          if (data && data.code === 200 && data.data) {
+            return data.data;  // 返回视频的 URL
+          } else {
+            console.error("Invalid response structure:", data);
+            return null;
+          }
         } catch (err) {
           console.error("Failed to fetch video url: ", err);
           return null;
@@ -162,6 +176,116 @@
           prePlayer.load();
         }
       }
+
+      async function preloadNextVideo() {
+        const newUrl = await fetchVideoUrl();
+        if (newUrl) {
+          prePlayer.src = newUrl;
+          prePlayer.load();
+        }
+      }
+
+      async function switchVideos() {
+        if (isLoading) {
+          return;
+        }
+        try {
+          isLoading = true;
+          currentPlayer.classList.add("hidden");
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          currentPlayer.style.display = "none";
+          await currentPlayer.pause();
+
+          prePlayer.style.display = "block";
+          prePlayer.classList.remove("hidden");
+          await prePlayer.play();
+
+          [currentPlayer, prePlayer] = [prePlayer, currentPlayer];
+
+          const newUrl = await fetchVideoUrl();
+          if (newUrl) {
+            prePlayer.src = newUrl;
+            prePlayer.load();
+          }
+          setTimeout(() => {
+            isLoading = false;
+          }, 1000);
+        } catch (e) {
+          setTimeout(() => {
+            isLoading = false;
+          }, 1000);
+          console.error("switch video error: ", e);
+          switchVideos();
+        }
+      }
+
+      function handleAutoPlay() {
+        const wasAutoPlayNext = autoPlayNext;
+        autoPlayNext = !autoPlayNext;
+        autoPlayButton.classList.toggle("active", autoPlayNext);
+        autoPlayButton.textContent = autoPlayNext ? "关闭自动切换" : "打开自动切换";
+        if (!wasAutoPlayNext && autoPlayNext) {
+          preloadNextVideo();
+        }
+      }
+
+      function handleMuteToggle() {
+        isMuted = !isMuted;
+        muteButton.classList.toggle("active", !isMuted);
+        muteButton.textContent = isMuted ? "打开声音" : "静音";
+        currentPlayer.muted = isMuted;
+        prePlayer.muted = isMuted;
+      }
+
+      function handleNextVideo() {
+        switchVideos();
+      }
+
+      let touchStartY = 0;
+      let touchEndY = 0;
+
+      function handleTouchStart(event) {
+        touchStartY = event.touches[0].clientY;
+      }
+
+      function handleTouchEnd(event) {
+        touchEndY = event.changedTouches[0].clientY;
+        handleSwipe();
+      }
+
+      function handleSwipe() {
+        const swipeDistance = touchEndY - touchStartY;
+        if (swipeDistance < -50) {
+          switchVideos();
+        }
+      }
+
+      function handleScroll(event) {
+        event.preventDefault();
+        if (event.deltaY > 0) {
+          switchVideos();
+        }
+      }
+
+      window.addEventListener("touchstart", handleTouchStart, { passive: true });
+      window.addEventListener("touchend", handleTouchEnd, { passive: true });
+      window.addEventListener("wheel", handleScroll, { passive: false });
+
+      currentPlayer.addEventListener("ended", () => {
+        if (autoPlayNext) {
+          switchVideos();
+        }
+      });
+      prePlayer.addEventListener("ended", () => {
+        if (autoPlayNext) {
+          switchVideos();
+        }
+      });
+
+      muteButton.addEventListener("click", handleMuteToggle);
+      autoPlayButton.addEventListener("click", handleAutoPlay);
+      nextVideoButton.addEventListener("click", handleNextVideo);
+      initializeVideos();
     </script>
   </body>
 </html>
