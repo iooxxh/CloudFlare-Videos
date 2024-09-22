@@ -65,10 +65,44 @@
       button.active {
         background-color: #666;
       }
+
+      /* 美化下拉框样式 */
+      #videoSource {
+        padding: 10px 15px;
+        font-size: 16px;
+        color: #fff;
+        background-color: #444;
+        border: none;
+        border-radius: 5px;
+        appearance: none;
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        outline: none;
+        cursor: pointer;
+        margin-bottom: 20px;
+      }
+
+      #videoSource:hover {
+        background-color: #666;
+      }
+
+      #videoSource:focus {
+        box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+      }
+
+      /* 为下拉按钮添加箭头样式 */
+      #videoSource {
+        background-image: url('data:image/svg+xml;utf8,<svg fill="%23ffffff" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/></svg>');
+        background-repeat: no-repeat;
+        background-position: right 10px center;
+        background-size: 20px;
+        padding-right: 40px;
+      }
+
     </style>
   </head>
   <body>
-    <!-- 视频来源选择 -->
+    <!-- 美化后的接口选择按钮 -->
     <select id="videoSource">
       <option value="https://api.yujn.cn/api/zzxjj.php?type=json">遇见API1</option>
       <option value="https://api.yujn.cn/api/xjj.php?type=json">遇见API2</option>
